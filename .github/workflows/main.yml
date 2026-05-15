@@ -1,0 +1,75 @@
+name: AXON_KERNEL_V15_INFRA
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'Server Region'
+        required: true
+        default: 'eu'
+        type: choice
+        options: [eu, us, ap]
+
+jobs:
+  pwn_environment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: System Hardening & Dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y tmate wget curl jq htop tmux build-essential git \
+          libpcap-dev golang-go python3-pip
+          
+      - name: Deploy Masscan (Raw Packet Engine)
+        run: |
+          git clone https://github.com/robertdavidgraham/masscan
+          cd masscan
+          make -j$(nproc)
+          sudo make install
+          cd ..
+
+      - name: Environment Configuration (Go & Python)
+        run: |
+          # إعداد المسارات
+          export GOPATH=$HOME/go
+          export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
+          
+          # إصلاح خطأ المودول: إنشاء بيئة عمل نظيفة لـ Go
+          mkdir -p $HOME/axon_core
+          cd $HOME/axon_core
+          go mod init axon/core
+          
+          # تثبيت المكتبات باستخدام الأمر الجديد المتوافق
+          go get golang.org/x/crypto/ssh
+          go get github.com/google/gopacket
+          
+          # تثبيت متطلبات بايثون للنموذج الأولي
+          pip3 install paramiko colorama --break-system-packages || pip3 install paramiko colorama
+
+      - name: Tmate Pro - High Visibility Session
+        run: |
+          cat << 'EOF' > ~/.tmate.conf
+          set -g status-bg black
+          set -g status-fg cyan
+          set -g status-right '#[fg=yellow] AXON_V15 #[fg=green]%H:%M:%S#[default]'
+          EOF
+          
+          tmate -S /tmp/tmate.sock new-session -d
+          tmate -S /tmp/tmate.sock wait tmate-ready
+          
+          SSH_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
+          WEB_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
+          
+          echo -e "\n\033[1;32m[+] KERNEL ACCESS ESTABLISHED - ALL PATCHES APPLIED\033[0m"
+          echo -e "\033[1;34m🌐 WEB_IF: $WEB_URL\033[0m"
+          echo -e "\033[1;34m💻 SSH_CMD: $SSH_URL\033[0m\n"
+
+      - name: Persistence Loop & Resource Monitor
+        run: |
+          while [ -S /tmp/tmate.sock ]; do
+            echo "--- AXON_HEARTBEAT: $(date) ---"
+            free -h | grep Mem
+            sleep 120
+          done
