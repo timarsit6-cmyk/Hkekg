@@ -1,0 +1,63 @@
+name: Advanced SSH Workspace (Tmate Pro)
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'اختر أقرب سيرفر لك (لتقليل التأخير)'
+        required: true
+        default: 'eu'
+        type: choice
+        options:
+          - eu
+          - us
+          - ap
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # GitHub يقطع الجلسة غالباً بعد 6 ساعات
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Optimization & Tooling
+        run: |
+          # تحديث سريع وتثبيت الأدوات الضرورية للعمل الاحترافي
+          sudo apt-get update
+          sudo apt-get install -y tmate wget curl jq htop tmux
+          
+          # تثبيت Node.js و Python (اختياري حسب حاجتك)
+          sudo apt-get install -y nodejs python3-pip
+
+      - name: Customizing Tmate Session
+        run: |
+          # إنشاء إعدادات مخصصة لـ tmate
+          echo "set -g status-right '#[fg=green]%H:%M:%S#[default]'" > ~/.tmate.conf
+          
+          # تشغيل الجلسة مع اختيار المنطقة
+          tmate -S /tmp/tmate.sock new-session -d
+          tmate -S /tmp/tmate.sock wait tmate-ready
+
+          # استخراج الروابط وحفظها في ملف
+          SSH_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
+          WEB_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
+          
+          echo "=========================================================="
+          echo "🌐 WEB TERMINAL: $WEB_URL"
+          echo "💻 SSH COMMAND: $SSH_URL"
+          echo "=========================================================="
+          
+          # إرسال الرابط إلى مخرجات GitHub لسهولة النسخ
+          echo "SSH_LINK=$SSH_URL" >> $GITHUB_ENV
+          echo "WEB_LINK=$WEB_URL" >> $GITHUB_ENV
+
+      - name: Live Console Display
+        run: |
+          # حلقة عرض الحالة لضمان عدم توقف الـ Action بسبب الخمول
+          echo "السيرفر يعمل الآن... يمكنك الاتصال."
+          while [ -S /tmp/tmate.sock ]; do
+            sleep 60
+            echo "Session heartbeat: $(date)"
+          done
